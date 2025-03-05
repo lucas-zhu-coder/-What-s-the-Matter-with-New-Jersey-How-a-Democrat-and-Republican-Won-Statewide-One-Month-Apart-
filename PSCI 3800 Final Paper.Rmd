@@ -1,0 +1,400 @@
+---
+title: "What's the Matter with New Jersey?"
+author: "Lucas Zhu"
+subtitle: How a Democrat and Republican Won Statewide One Month Apart
+date: "Fall 2024 PSCI 3800 Final Paper"
+output:
+  pdf_document: default
+---
+----------------------------------
+```{r, echo = F, message = F, warning = F}
+library(tidyverse)
+library(sf)
+library(weights)
+library(rio)
+library(stringr)
+library(scales)
+```
+
+```{r Data Cleaning, echo = F}
+# importing data
+nj <- import("NJ Poll.csv")
+
+# making variable for their vote choices
+nj$vote <- NA
+nj$vote[(nj$q9 == "Booker" | nj$q9a == "Booker") & (nj$q14 == "Christie")] <- "Booker-Christie"
+nj$vote[(nj$q9 == "Booker" | nj$q9a == "Booker") & (nj$q14 == "Buono")] <- "Booker-Buono"
+nj$vote[(nj$q9 == "Lonegan" | nj$q9a == "Lonegan") & (nj$q14 == "Christie")] <- "Lonegan-Christie"
+nj$vote[(nj$q9 == "Lonegan" | nj$q9a == "Lonegan") & (nj$q14 == "Buono")] <- "Lonegan-Buono"
+```
+
+### 1 | Introduction & Background
+
+  In recent years, few voters switch which party they vote for between two different elections.^[<https://www.pewresearch.org/politics/2023/07/12/republican-gains-in-2022-midterms-driven-mostly-by-turnout-advantage/>] The idea of one party’s candidate winning one election statewide by double-digits and another party’s candidate winning a statewide election one month later in a landslide has become unheard of.
+
+  Yet, the 2013 New Jersey elections did just that.
+
+  In October 2013, after the death of Senator Frank Lautenberg, Democrat Cory Booker defeated Republican Steve Lonegan in the New Jersey senate special election by 10%. Yet, one month later, Republican Chris Christie defeated Democrat Barbara Buono in the New Jersey gubernatorial election in a landslide. Who were the types of voters who voted Democratic in October, but Republican in November? 
+  Ultimately, Booker-Christie voters were moderates and liberals who were less politically engaged. While they liked Booker and Christie, they had apathy, not extreme dislike, for Lonegan and Buono.
+
+  I use a 2013 Rutgers-Eagleton survey taken briefly before the senate and gubernatorial elections. So, references in this paper to “Booker-Christie voters” or other voting combinations are actually their voting intentions since they had not yet voted. 
+
+  
+### 2 | Ideology
+	
+  First, Figure 1 demonstrates that Booker-Christie voters were mainly moderates (59%). This is the highest of the three voting combinations^[As noted in the methodology statement, Lonegan-Buono voters were excluded because there were only 10 in the sample, which may inaccurately represent their actual beliefs] as only 47% and 36% of Booker-Buono and Lonegan-Christie voters identified as moderates, respectively. This makes sense as Christier-Booker voters were open to voting for both a Republican and Democrat, meaning they were likely centrist and not loyal to one party. 
+
+```{r Ideology Graph, echo = F}
+# renaming ideology to something intuitive
+nj <- rename(nj,
+       ideology = qd4)
+
+# making function to do ideology mean calculations
+mean.fct <- function (ideology, vote) {
+  weighted.mean(nj$ideology[nj$vote == vote] == ideology, 
+                w = nj$weight[nj$vote == vote], na.rm = T)
+}
+
+# ideology calculation
+ideology <- c("Conservative", "Liberal", "Moderate")
+voters <- unique(nj$vote[!is.na(nj$vote)])
+
+# making empty ideology dataframe
+ideology.df <- data.frame(ideology = ideology,
+           booker.christie = rep(NA, 3),
+           lonegan.christie = rep(NA, 3),
+           booker.buono = rep(NA, 3),
+           lonegan.buono = rep(NA, 3))
+
+# running the function on everything
+for (ii in 1:length(voters)) {
+  for (i in 1:length(ideology)) {
+  ideology.df[i, ii+1] <- mean.fct(ideology[i], voters[ii])
+  }
+}
+
+# pivoting it longer to make bar plotting easier
+ideology.df <- pivot_longer(ideology.df,
+                             cols = booker.christie:lonegan.buono,
+                             names_to = "voters",
+                             values_to = "pct")
+
+# dropping lonegan-buono voters
+ideology.df <- ideology.df[ideology.df$voters != "lonegan.buono",]
+
+# making the names of the types of voters cleaner
+ideology.df$voters[ideology.df$voters == "lonegan.christie"] <- "Lonegan-Christie\n(Only Republicans)"
+ideology.df$voters[ideology.df$voters == "booker.christie"] <- "Booker-Christie\n(Democrat; Republican)"
+ideology.df$voters[ideology.df$voters == "booker.buono"] <- "Booker-Buono\n(Only Democrats)"
+
+# making it into a factor variable to get it in the order I want it in
+ideology.df$ideology <- factor(ideology.df$ideology,
+                                    levels = c("Conservative", "Moderate", "Liberal"))
+
+# making the barplot
+ggplot(ideology.df) +
+  aes(x = voters, 
+      y = pct, 
+      fill = ideology,
+      group = ideology) +
+  geom_bar(stat = "identity", 
+           position = position_dodge(), 
+           width = 0.5) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  ggtitle("Ideology of 2013 Vote Choices",
+          subtitle = "(Excluding Lonegan-Buono Voters)") +
+  scale_y_continuous(labels = scales::percent_format(),
+                     breaks = seq(0, 1, .1)) +
+  scale_fill_manual(values = c("firebrick", "purple3", "dodgerblue"),
+                       labels = c("Conservative", "Moderate", "Liberal")) +
+  xlab("") +
+  ylab("") +
+  geom_text(data = ideology.df,
+            mapping = aes(x = voters,
+                          y = pct,
+                          group = ideology,
+                          label = paste0(round(pct, 2)*100, "%")),
+                          position = position_dodge(0.5),
+                          vjust = -0.5,
+                          size = 2.75) +
+  theme(legend.title = element_blank()) +
+  expand_limits(y = c(0, 0.7))
+```
+
+  Interestingly, many Booker-Christie voters were liberal. While 44% of Booker-Buono voters were liberal (which is rational since they were both Democrats), 31% of Booker-Christie voters were liberal, not far behind the proportion making up Booker-Buono voters. This percentage is surprisingly high as it shows that some liberal Booker voters still voted for Christie despite him being a Republican. In contrast, conservatives composed the smallest percentage of Booker-Christie voters (10%). Therefore, most Booker-Christie voters were moderate and liberal.
+
+### 3 | Engagement
+
+  Figure 2 shows that Booker-Christie voters were less engaged than other voters. Compared to Lonegan-Christie and Booker-Buono voters, a greater proportion of Booker-Christie voters said they were “not or not too closely” watching the two elections. For example, whereas only about 20% of Lonegan-Christie and Booker-Buono voters said they were “not or not too closely” watching the gubernatorial election, 35% of Booker-Christie voters said so. Also, a lower proportion of Booker-Christie voters said they were watching either election “very or somewhat closely.” For instance, only 45% of Booker-Christie voters said they were watching the Senate election “very or somewhat closely,” while approximately 70% of Booker-Buono and Lonegan-Christie voters said so.
+
+```{r Engagement Graph, echo = F}
+# renaming the engagement vars to something intuitive
+nj <- rename(nj,
+       sen.engage = lv4,
+       gov.engage = lv6)
+
+# making function for calculating the engagement percentage among each 
+# voting group
+engagement.mean <- function (elect, voter, level1, level2) {
+  weighted.mean(nj[,elect][nj$vote == voter] == level1 | nj[,elect][nj$vote == voter] == level2, 
+                w = nj$weight[nj$vote == voter], na.rm = T)
+
+}
+
+# making senate engagement dataframe
+sen.engage <- data.frame(engagement = c("Very Closely & Somewhat Closely", 
+                                        "Not Closely & Not Too Closely"),
+           booker.christie = rep(NA, 2),
+           lonegan.christie = rep(NA, 2),
+           booker.buono = rep(NA, 2),
+           lonegan.buono = rep(NA, 2))
+
+# running the function on everything
+for (i in 1:length(voters)) {
+  sen.engage[1, i+1] <- engagement.mean("sen.engage", voters[i], "Very Closely", "Somewhat Closely")
+  sen.engage[2, i+1] <- engagement.mean("sen.engage", voters[i], "Not at all Closely", "Not too Closely")
+  }
+
+# gov election engagement
+gov.engage <- data.frame(engagement = c("Very Closely & Somewhat Closely", 
+                                        "Not Closely & Not Too Closely"),
+           booker.christie = rep(NA, 2),
+           lonegan.christie = rep(NA, 2),
+           booker.buono = rep(NA, 2),
+           lonegan.buono = rep(NA, 2))
+
+# running for loop on all
+for (i in 1:length(voters)) {
+  gov.engage[1, i+1] <- engagement.mean("gov.engage", voters[i], "Very Closely", "Somewhat Closely")
+  gov.engage[2, i+1] <- engagement.mean("gov.engage", voters[i], "Not at all Closely", "Not too Closely")
+  }
+
+# adding the race so I know it before i pivot longer
+sen.engage$race <- "Senate"
+gov.engage$race <- "Governor"
+
+# combining dfs together
+all.engaged <- bind_rows(sen.engage, gov.engage)
+
+# pivoting longer to make it easier to graph
+all.engaged <- pivot_longer(all.engaged,
+                            names_to = "voter",
+                            values_to = "pct",
+                            cols = booker.christie:lonegan.buono)
+
+# deleting lonegan-buono voters
+all.engaged <- all.engaged[all.engaged$voter != "lonegan.buono",]
+
+# making names cleaner
+all.engaged$engagement[all.engaged$engagement == "Very Closely & Somewhat Closely"] <- "Very or Somewhat Closely"
+all.engaged$engagement[all.engaged$engagement == "Not Closely & Not Too Closely"] <- "Not or Not Too Closely"
+
+# making voter names cleaner
+all.engaged$voter[all.engaged$voter == "booker.christie"] <- "Booker-Christie\n(Democrat; Republican)"
+all.engaged$voter[all.engaged$voter == "booker.buono"] <- "Booker-Buono\n(Only Democrats)"
+all.engaged$voter[all.engaged$voter == "lonegan.christie"] <- "Lonegan-Christie\n(Only Republicans)"
+
+# making barplot
+ggplot(all.engaged) +
+  aes(x = race, 
+      y = pct, 
+      fill = engagement) +
+  facet_wrap(~voter) +
+  geom_bar(stat = "identity", 
+           position = position_dodge(), 
+           width = 0.5) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  ggtitle("How Closely Voters Followed the 2013 Governor and Senate Elections",
+          subtitle = "By Vote Choice (Excluding Lonegan-Buono Voters)") +
+  scale_y_continuous(labels = scales::percent_format(),
+                     breaks = seq(0, 1, .1)) +
+  xlab("") +
+  ylab("") +
+  geom_text(data = all.engaged,
+            mapping = aes(x = race,
+                          y = pct,
+                          label = paste0(round(pct, 2)*100, "%")),
+                          position = position_dodge(0.5),
+                          vjust = -0.5,
+                          size = 2.25) +
+  theme(legend.title = element_blank()) +
+  expand_limits(y = c(0, .85))
+```
+
+  Booker-Christie voters were more likely to be engaged in the gubernatorial election than the senate election. While 65% of Booker-Christie voters said they were watching the gubernatorial election “very or somewhat closely,” only 45% said so for the senate election. Conversely, while 35% of Booker-Christie voters said they were “not or not too closely” watching the gubernatorial election, 55% of Booker-Christie voters said so for the senate election. This 20% gap between Booker-Christie voters saying they were watching the Governor’s election “very or somewhat closely” compared to the Senate election shows they paid closer attention to the gubernatorial than the senate election. 
+
+  Ultimately, this demonstrates that Christie flipped Booker voters who were less engaged overall and were less focused on the senate election than the gubernatorial election. As established, nearly one-third of Booker-Christie voters identified themselves as “liberal.” One possibility could be that some Booker-Christie voters defaulted to voting for Booker because he was a Democrat in an election they were not closely watching. Instead, they could have been more focused on the Governor’s election and voted for Christie because they were informed and knew that they liked him. Overall, this demonstrates that Booker-Christie voters were less politically engaged than other voters, especially in the senate election.
+
+### 4 | Approval of Candidates
+  
+  Figure 3 shows the voters’ favorability ratings for the 2013 senate and gubernatorial candidates. As expected, Booker-Buono voters give the two Republicans low approval and high disapproval ratings but give high approvals and low disapprovals for the Democrats. The reverse is true for Lonegan-Christie voters, who had excellent approval ratings for the Republicans but poor approvals for the Democrats. 
+
+```{r Approval Graph, echo = F}
+# making function for approval
+approval.fct <- function (question, approval, vote) {
+  weighted.mean(nj[,question][nj$vote == vote] == approval, 
+                w = nj$weight[nj$vote == vote], na.rm = T)
+
+  }
+
+# refused as NA
+nj$q1b[nj$q1b == "Refused"] <- NA
+nj$q1c[nj$q1c == "Refused"] <- NA
+nj$q1d[nj$q1d == "Refused"] <- NA
+nj$q1f[nj$q1f == "Refused"] <- NA
+
+approvals <- unique(nj$q1b[!is.na(nj$q1b)])
+voters <- unique(nj$vote[!is.na(nj$vote)])
+
+# making Christie approval df
+christie.approval <- data.frame(approvals = approvals,
+           booker.christie = rep(NA, 3),
+           lonegan.christie = rep(NA, 3),
+           booker.buono = rep(NA, 3),
+           lonegan.buono = rep(NA, 3))
+
+for (ii in 1:length(voters)) {
+  for (i in 1:length(approvals)) {
+  christie.approval[i, ii+1] <- approval.fct("q1b", approvals[i], voters[ii])
+  }
+}
+
+
+# making buono df
+approvals <- unique(nj$q1c[!is.na(nj$q1c)])
+voters <- unique(nj$vote[!is.na(nj$vote)])
+
+buono.approval <- data.frame(approvals = approvals,
+           booker.christie = rep(NA, 3),
+           lonegan.christie = rep(NA, 3),
+           booker.buono = rep(NA, 3),
+           lonegan.buono = rep(NA, 3))
+
+for (ii in 1:length(voters)) {
+  for (i in 1:length(approvals)) {
+  buono.approval[i, ii+1] <- approval.fct("q1c", approvals[i], voters[ii])
+  }
+}
+
+# making booker df
+approvals <- unique(nj$q1d[!is.na(nj$q1d)])
+voters <- unique(nj$vote[!is.na(nj$vote)])
+
+booker.approval <- data.frame(approvals = approvals,
+           booker.christie = rep(NA, 3),
+           lonegan.christie = rep(NA, 3),
+           booker.buono = rep(NA, 3),
+           lonegan.buono = rep(NA, 3))
+
+for (ii in 1:length(voters)) {
+  for (i in 1:length(approvals)) {
+  booker.approval[i, ii+1] <- approval.fct("q1d", approvals[i], voters[ii])
+  }
+}
+
+# making lonegan df
+nj$q1f[nj$q1f == "Dont know/Not sure"] <- "No Opinion/DK Person"
+
+approvals <- unique(nj$q1f[!is.na(nj$q1f)])
+voters <- unique(nj$vote[!is.na(nj$vote)])
+
+lonegan.approval <- data.frame(approvals = approvals,
+           booker.christie = rep(NA, 3),
+           lonegan.christie = rep(NA, 3),
+           booker.buono = rep(NA, 3),
+           lonegan.buono = rep(NA, 3))
+
+for (ii in 1:length(voters)) {
+  for (i in 1:length(approvals)) {
+  lonegan.approval[i, ii+1] <- approval.fct("q1f", approvals[i], voters[ii])
+  }
+}
+
+# adding the name so it makes more sense when I pivot longer
+christie.approval$person <- "Christie\n(R-GOV)"
+buono.approval$person <- "Buono\n(D-GOV)"
+booker.approval$person <- "Booker\n(D-SEN)"
+lonegan.approval$person <- "Lonegan\n(R-SEN)"
+
+# binding all the dataframes together
+all.approvals <- bind_rows(christie.approval, buono.approval, booker.approval, lonegan.approval)
+
+# pivoting long to make graphing cleaner
+all.approvals <- pivot_longer(all.approvals,
+             names_to = "voter",
+             values_to = "pct",
+             cols = booker.christie:lonegan.buono)
+
+# making the names cleaner and dropping lonegan-buono voters
+all.approvals <- all.approvals[all.approvals$voter != "lonegan.buono",]
+all.approvals$approvals[all.approvals$approvals == "No Opinion/DK Person"] <- "No Opinion/DK"
+all.approvals$voter[all.approvals$voter == "booker.christie"] <- "Booker-Christie\n(Democrat; Republican)"
+all.approvals$voter[all.approvals$voter == "booker.buono"] <- "Booker-Buono\n(Only Democrats)"
+all.approvals$voter[all.approvals$voter == "lonegan.christie"] <- "Lonegan-Christie\n(Only Republicans)"
+
+# making barplot
+ggplot(all.approvals) +
+  aes(x = person, 
+      y = pct, 
+      fill = approvals,
+      group = approvals) +
+  facet_wrap(~voter) +
+  geom_bar(stat = "identity", 
+           position = position_dodge(), 
+           width = 0.5) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  theme(legend.title = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  ggtitle("Approval of Senate & Governor Candidates",
+          subtitle = "By Voting Choice (Excluding Lonegan-Buono Voters)") +
+  scale_y_continuous(labels = scales::percent_format(),
+                     breaks = seq(0, 1, .2)) +
+  scale_fill_manual(values = c("forestgreen", "gray60", "red3"),
+                    labels = c("Approve", "No Opinion/DK", "Disapprove")) +
+  xlab("") +
+  ylab("") +
+  expand_limits(y = c(0, 1)) +
+  geom_text(data = all.approvals,
+            mapping = aes(x = person,
+                          y = pct,
+                          group = approvals,
+                          label = paste0(round(pct, 2)*100, "%")),
+                          position = position_dodge(0.5),
+                          hjust = -0.15,
+                          size = 2.5) +
+  coord_flip()
+```
+
+  The settled political views of straight-party voters contrasted those of Booker-Christie voters. Booker-Christie voters highly approved of Booker (76%-8%) and Christie (88%-4%), so they could have voted for them because they liked them. While Booker-Christie voters disliked Lonegan (5%-34%) and Buono (13%-31%) their distaste was not as extreme as the straight-ticket voters’ dislike for their opposing party’s candidates. This was because many Booker-Christie voters had no opinions on Lonegan (61%) and Buono (56%). These were the highest proportion of “no opinion” responses for any candidate across all voting combinations. So, most Booker-Christie voters did not actively dislike Buono or Lonegan. Perhaps, Booker-Christie voters strongly approved of Booker and Christie and voted for them without considering their opponents. 
+  
+  As established, Booker-Christie voters were less politically engaged than straight-party voters. This would explain why a large proportion had “no opinion” on Booker or Lonegan rather than disapproved of them because they were not paying much attention to these elections. This also could be why more had no opinion on Booker than Christie because they were less engaged in the senate than in the gubernatorial election. Ultimately, this shows that Booker-Christie voters voted for Booker and Christie because they liked their chosen candidates, not because they disliked their opponents. 
+  
+### 5 | Conclusion & Implications
+  This report demonstrates the characteristics of voters who supported Cory Booker in October and Chris Christie in November. First, they were mainly moderates or liberals. Second, they were less politically engaged than straight-party voters. Third, they had favorable ratings of the candidates they voted for but had largely indifferent views of their opponents. 
+	
+  This paper gives campaigns a better understanding of voters who voted for the opposing party in a previous election. This helps them develop strategies to better win over these voters to win an election.
+
+\newpage
+### Methodology Statement
+
+  The data used for this paper was from a Rutgers-Eagleton poll taken in 2013 and was accessed through the Roper iPoll database. The sample size was 799 registered voters and the population that this data was attempting to measure was all New Jersey voters to see their opinions on the 2013 senate and gubernatorial elections. The weights I used in measuring the percentages were the “weights” column in the dataset.
+  
+  To analyze this data and create the visuals, I first created a column using variables q9 (Senate vote intention), q9a (Senate vote intention including learners), and q14 (Governor vote intention) that listed if voters were a “Booker-Christie,” “Booker-Buono,” “Lonegan-Christie,” or “Lonegan-Buono” voter. This helped me create the bar graphs seen in the paper. After this, I used the weights to perform several calculations using the weighted.mean() function. For Figure 1, I calculated the percentage of each voting combination that was made up of each ideology using Qd4. For Figure 2, I calculated the percentage of each voting combination that was “somewhat” or “very closely” watching the gubernatorial and senate elections. Using the LV4 and LV6 variables to do this, as there were four options for responses originally (Very Closely, Somewhat Closely, Not too Closely, Not at all Closely), I used the weighted.mean() function to find the proportion of those who were very closely **or** somewhat closely watching the election and grouped this into one category. I then grouped another category of people who were not too closely **or** not closely watching the election. For Figure 3, I found the proportion of each voter combination using weighted.mean() that had favorable, unfavorable, or no opinions on each candidate and created a dataframe for this. I used variables q1b, q1c, q1d, and q1f to do this. I also removed Lonegan-Buono voters because there were only 10 in the sample, which could lead to misleading proportions. Therefore, I only stuck with the rest of the three, all of which had over 150 people in them. 
+  
+  After doing these calculations, I used ggplot() and the geom_bar() function to create bar plots for each variable that I investigated. I chose to use barplots instead of other plots because the barplots better showed how different Booker-Christie voters were from the other voting combinations. For example, in Figure 3, the length of the bars make it very clear how Booker-Christie voters had “no opinion” on the candidates much more frequently than other voter combinations. Or, in Figure 2, the bars for the Christie-Booker voters made it clear that they were much less engaged than other voting combinations. 
+
+
+**Note & Fun Fact!** 
+
+Chris Christie is an alumni of my high school (Livingston High School, New Jersey) and launched his 2016 Presidential campaign in my high school's gym^[See: <https://www.youtube.com/watch?v=ORzqPD_q7eI>]! I still remember the buzz (and controversy^[<https://www.tapinto.net/towns/summit/sections/government/articles/christie-rumored-to-announce-bid-for-presidency-a>]) in my town when I was in fifth grade when he decided to launch his campaign at my high school. I also remember being in third grade when the 2013 gubernatorial election occurred and remembered my teacher remarking how Barbara Buono campaigned so little and how no one knew much about her, whereas everyone knew Chris Christie.
+
+**Citation:**
+Eagleton Institute of Politics, Rutgers University. Rutgers-Eagleton Poll #188: New Jersey early-October 2013, 2013 [Dataset]. Roper #31119270, Version 2. Eagleton Center for Public Interest Polling [producer]. Cornell University, Ithaca, NY: Roper Center for Public Opinion Research [distributor]. doi:10.25940/ROPER-31119270
